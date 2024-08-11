@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Counter</title>
+    <!-- Bulma CSS CDN -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <script defer src="https://pyscript.net/alpha/pyscript.js"></script>
+</head>
+<body>
+    <section class="section">
+        <div class="container">
+            <h1 class="title has-text-centered">Word Counter App</h1>
+            
+            <div class="field">
+                <label class="label" for="text-input">Enter your text here:</label>
+                <div class="control">
+                    <textarea class="textarea" id="text-input" rows="5" placeholder="Type or paste your text here..."></textarea>
+                </div>
+            </div>
+
+            <div class="field has-text-centered">
+                <button id="count-button" class="button is-primary">Count Words</button>
+            </div>
+            
+            <div class="field has-text-centered">
+                <p id="result" class="is-size-4 has-text-weight-bold"></p>
+            </div>
+        </div>
+    </section>
+
+    <py-script>
+        from js import document
+
+        def count_words(*args):
+            text = document.getElementById("text-input").value
+            words = text.split()
+            word_count = len(words)
+            result_element = document.getElementById("result")
+            result_element.innerHTML = f"Word Count: {word_count}"
+
+        document.getElementById("count-button").addEventListener("click", count_words)
+    </py-script>
+</body>
+</html>
