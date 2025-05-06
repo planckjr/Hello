@@ -5,7 +5,7 @@ Experiments
 
 I can test math:
 
-$p(x) = \sum \psi_i$
+$$p(x) = \sum \psi_i$$
 
 
 
