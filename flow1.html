@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CX4U — Flow (JSON + Vue + SVG, Light Theme)</title>
+<style>
+  :root{
+    --bg:#f6f8fb;
+    --panel:#ffffff;
+    --stroke:#3a86ff;      /* primary blue accents */
+    --muted:#6b7280;       /* gray-600 */
+    --text:#0f172a;        /* slate-900 */
+    --shadow:0 8px 30px rgba(0,0,0,.06);
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Ubuntu,Helvetica,Arial}
+  .toolbar{padding:12px 16px;border-bottom:1px solid #e5e7eb;background:#ffffff;position:sticky;top:0;display:flex;gap:12px;align-items:center;z-index:5}
+  .btn{padding:8px 12px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;color:#0f172a;cursor:pointer;box-shadow:var(--shadow)}
+  .btn:hover{background:#f3f4f6}
+  .hint{opacity:.7;font-size:13px}
+  .stage{position:relative;height:calc(100vh - 60px)}
+  svg{width:100%;height:100%}
+  .node{cursor:pointer;transition:transform .15s ease}
+  .node.active{transform:scale(1.02)}
+  .node rect{fill:var(--panel);stroke:var(--stroke);stroke-width:2;rx:18;ry:18;box-shadow:var(--shadow);filter:drop-shadow(0 6px 18px rgba(58,134,255,.08))}
+  .node text{pointer-events:none}
+  .title{font-weight:700}
+  .subtitle{fill:var(--muted)}
+  .link{stroke:var(--stroke);stroke-width:2.5;fill:none;marker-end:url(#arrow);filter:drop-shadow(0 2px 6px rgba(58,134,255,.18))}
+  .ilink{stroke:#a3aab5;stroke-width:1.8;fill:none;stroke-dasharray:4 4;opacity:.9}
+  .dim{opacity:.18}
+
+  .drawer{position:absolute;inset-block:0;right:0;width:min(420px,92vw);background:#ffffff;color:#0f172a;
+          border-left:1px solid #e5e7eb;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;box-shadow:var(--shadow)}
+  .drawer.open{transform:translateX(0)}
+  .drawer header{padding:14px 16px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;align-items:center}
+  .drawer h3{margin:0;font-size:16px}
+  .drawer small{color:#6b7280}
+  .drawer .body{padding:14px 16px;overflow:auto}
+  .pill{display:inline-block;margin:4px 0;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#1d4ed8;border:1px solid #c7d2fe;font-size:13px}
+</style>
+</head>
+<body>
+  <!-- JSON CONTENT (edit here; no external files) -->
+  <script type="application/json" id="cx4u-data">
+  {
+    "nodes": [
+      {
+        "id":"inputs",
+        "title":"0_input_interfaces",
+        "subtitle":"Measurement Instruments",
+        "items":[
+          "signal_web_chat (QR → conversational UI)",
+          "signal_whatsapp_adapter (Cloud API webhook)",
+          "signal_telegram_adapter (Bot API webhook)",
+          "signal_protocols (normalize payloads)"
+        ]
+      },
+      {
+        "id":"acq",
+        "title":"1_data_acquisition",
+        "subtitle":"Detector & Data Logger",
+        "items":[
+          "ingest_pipelines (routes/controllers)",
+          "raw_observations (raw_events, immutable)",
+          "media_store (images/audio/video)",
+          "observation_models (schemas)",
+          "observation_logs (ingest metrics)"
+        ]
+      },
+      {
+        "id":"proc",
+        "title":"2_signal_processing",
+        "subtitle":"AI Laboratory",
+        "items":[
+          "text_analysis (sentiment/topics/emotion)",
+          "audio_transcription (Whisper)",
+          "feature_extraction (keyphrases/entities)",
+          "synthesis_layer (summary/recs/scores)",
+          "model_registry (versions/config)",
+          "processed_data_store (processed_feedback)"
+        ]
+      },
+      {
+        "id":"surf",
+        "title":"3_information_surface",
+        "subtitle":"Observation Screen",
+        "items":[
+          "dashboard_observer (business UI)",
+          "data_api_gateway (REST/GraphQL)",
+          "view_models (serializers/DTOs)",
+          "analytics_components (charts/stats)",
+          "access_control (authN/Z)"
+        ]
+      },
+      {
+        "id":"infra",
+        "title":"4_common_infrastructure",
+        "subtitle":"Physical Constants",
+        "items":[
+          "database_field (Postgres/SQLite)",
+          "storage_field (S3/GCS/local)",
+          "logging_observatory (structured logs)",
+          "schema_definitions (JSON/Pydantic)",
+          "security_protocols (HMAC, signed URLs, keys)"
+        ]
+      }
+    ],
+    "edges":[
+      {"source":"inputs","target":"acq"},
+      {"source":"acq","target":"proc"},
+      {"source":"proc","target":"surf"}
+    ],
+    "canvas":{"width":1200,"height":900,"card":{"w":360,"h":120,"r":18},"gap":50}
+  }
+  </script>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <strong>CX4U — Information Flow</strong>
+    <span class="hint">tap a block to see details</span>
+    <div style="flex:1"></div>
+    <button class="btn" id="toggle">Toggle Orientation (Vertical)</button>
+    <button class="btn" id="download">Download SVG</button>
+  </div>
+
+  <!-- App Stage -->
+  <div id="app" class="stage">
+    <!-- Drawer -->
+    <aside class="drawer" :class="{open: drawerOpen}">
+      <header>
+        <h3>{{ drawer.title || 'Details' }}</h3>
+        <div style="flex:1"></div>
+        <button class="btn" @click="closeDrawer">Close</button>
+      </header>
+      <div class="body">
+        <div style="margin-bottom:8px"><small>{{ drawer.subtitle }}</small></div>
+        <div>
+          <span class="pill" v-for="it in drawer.items" :key="it">{{ it }}</span>
+        </div>
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0" />
+        <small style="opacity:.75">Channel-agnostic: swap Web/WhatsApp/Telegram without changing downstream contracts.</small>
+      </div>
+    </aside>
+
+    <!-- SVG Canvas -->
+    <svg :viewBox="`0 0 ${W} ${H}`" ref="svg">
+      <defs>
+        <marker id="arrow" viewBox="0 -5 10 10" refX="10" refY="0" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,-5L10,0L0,5" :fill="stroke"></path>
+        </marker>
+      </defs>
+
+      <!-- Main links -->
+      <g id="links">
+        <path v-for="(e,i) in edges" :key="'L-'+i" class="link"
+              :class="{'dim': dimLink(e)}" :d="linkPath(e)"></path>
+      </g>
+
+      <!-- Nodes -->
+      <g id="nodes">
+        <g v-for="n in nodes" :key="n.id" class="node"
+           :class="{active: selected && selected.id === n.id}"
+           :transform="`translate(${pos[n.id].x},${pos[n.id].y})`"
+           @click="openDrawer(n)">
+          <rect :width="card.w" :height="card.h" :rx="card.r" :ry="card.r"></rect>
+          <text class="title" :x="card.w/2" :y="card.h/2 - 8" text-anchor="middle" font-size="18">{{ n.title }}</text>
+          <text class="subtitle" :x="card.w/2" :y="card.h/2 + 18" text-anchor="middle" font-size="14">{{ n.subtitle }}</text>
+        </g>
+      </g>
+
+      <!-- Dashed infra links -->
+      <g id="infraLinks">
+        <path v-for="(n,i) in nodes.filter(m => m.id !== 'infra')" :key="'I-'+i"
+              class="ilink" :class="{'dim': selected && selected.id !== n.id}" :d="infraPath(n.id)"></path>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Vue (CDN) -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script>
+  const App = {
+    data(){
+      const data = JSON.parse(document.getElementById('cx4u-data').textContent);
+      return {
+        // theme / constants
+        stroke: getComputedStyle(document.documentElement).getPropertyValue('--stroke') || '#3a86ff',
+        // state
+        orientation: 'vertical',
+        selected: null,
+        drawerOpen: false,
+        drawer: { title:'', subtitle:'', items:[] },
+        // data
+        nodes: data.nodes,
+        edges: data.edges,
+        W: data.canvas.width, H: data.canvas.height,
+        card: data.canvas.card, gap: data.canvas.gap,
+        pos: {}
+      };
+    },
+    mounted(){
+      this.computeLayout();
+      // buttons outside Vue root
+      document.getElementById('toggle').addEventListener('click', this.toggle);
+      document.getElementById('download').addEventListener('click', this.downloadSvg);
+    },
+    methods:{
+      computeLayout(){
+        const pos = {};
+        if(this.orientation === 'vertical'){
+          const cx = this.W/2; let y = 120;
+          this.nodes.forEach(n => { pos[n.id] = { x: cx - this.card.w/2, y }; y += this.card.h + this.gap; });
+        }else{
+          const cy = this.H/2; let x = 100;
+          this.nodes.forEach(n => { pos[n.id] = { x, y: cy - this.card.h/2 }; x += this.card.w + this.gap; });
+        }
+        this.pos = pos;
+      },
+      linkPath(e){
+        const A = this.pos[e.source], B = this.pos[e.target], c = this.card;
+        if(this.orientation === 'vertical'){
+          const x1 = A.x + c.w/2, y1 = A.y + c.h;
+          const x2 = B.x + c.w/2, y2 = B.y;
+          const c1 = (y1 + y2)/2 - 30, c2 = (y1 + y2)/2 + 30;
+          return `M${x1},${y1} C ${x1},${c1} ${x2},${c2} ${x2},${y2}`;
+        }else{
+          const x1 = A.x + c.w, y1 = A.y + c.h/2;
+          const x2 = B.x,         y2 = B.y + c.h/2;
+          const c1 = (x1 + x2)/2 - 30, c2 = (x1 + x2)/2 + 30;
+          return `M${x1},${y1} C ${c1},${y1} ${c2},${y2} ${x2},${y2}`;
+        }
+      },
+      infraPath(fromId){
+        const A = this.pos[fromId], I = this.pos['infra'], c = this.card;
+        if(this.orientation === 'vertical'){
+          const x1 = A.x + c.w, y1 = A.y + c.h/2;
+          const x2 = I.x + c.w/2, y2 = I.y + c.h/2;
+          const cx = (x1 + x2)/2;
+          return `M${x1},${y1} C ${cx},${y1} ${cx},${y2} ${x2},${y2}`;
+        }else{
+          const x1 = A.x + c.w/2, y1 = A.y + c.h;
+          const x2 = I.x + c.w/2, y2 = I.y + c.h/2;
+          const cy = (y1 + y2)/2;
+          return `M${x1},${y1} C ${x1},${cy} ${x2},${cy} ${x2},${y2}`;
+        }
+      },
+      openDrawer(n){
+        this.selected = n;
+        this.drawer = { title:n.title, subtitle:n.subtitle, items:n.items };
+        this.drawerOpen = true;
+      },
+      closeDrawer(){
+        this.drawerOpen = false;
+        this.selected = null;
+      },
+      dimLink(e){
+        if(!this.selected) return false;
+        return !(e.source === this.selected.id || e.target === this.selected.id);
+      },
+      toggle(){
+        this.orientation = (this.orientation === 'vertical') ? 'horizontal' : 'vertical';
+        this.closeDrawer();
+        this.computeLayout();
+      },
+      downloadSvg(){
+        const svgEl = this.$refs.svg;
+        let source = new XMLSerializer().serializeToString(svgEl);
+        if(!source.match(/^<svg[^>]+xmlns="/))
+          source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+        const blob = new Blob([source], {type:"image/svg+xml;charset=utf-8"});
+        const url = URL.createObjectURL(blob);
+        const a = Object.assign(document.createElement('a'), {href:url, download:`cx4u_flow_${this.orientation}.svg`});
+        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+      }
+    }
+  };
+
+  Vue.createApp(App).mount('#app');
+  </script>
+</body>
+</html>
